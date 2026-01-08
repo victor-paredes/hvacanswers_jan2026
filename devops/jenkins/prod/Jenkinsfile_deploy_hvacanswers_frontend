@@ -1,0 +1,53 @@
+import java.util.Calendar;
+
+@Library('ep8-pipeline-library')
+import com.johnstonesupply.EP8Deployer
+
+pipeline {
+  agent any
+
+  options {
+    // Keep the 10 most recent builds
+    buildDiscarder(logRotator(numToKeepStr: '10'))
+  }
+  
+  environment {
+
+    S3_BUCKET = 'www.hvacanswers.com'
+    CF_DISTRO = 'EP3FNWMGYDDSC'
+  }
+
+  stages {
+    stage ('S3 Delete') {
+      steps {
+        withAWS(credentials:'aws-hvacanswers-creds') {
+           s3Delete(bucket: "${S3_BUCKET}", path:'/')
+        }      
+      }
+    }
+
+    stage ('S3 Upload') {
+      steps {
+        withAWS(credentials:'aws-hvacanswers-creds') {
+           s3Upload(bucket: "${S3_BUCKET}", includePathPattern:'**/*', workingDir:'./', excludePathPattern:'devops/**')
+        }      
+      }
+    }
+
+    stage ('Copy robots.txt') {
+      steps {
+        withAWS(credentials:'aws-hvacanswers-creds') {
+           s3Upload(bucket: "${S3_BUCKET}", file: './robots/robots-prod.txt', path: 'robots.txt')
+        }      
+      }
+    }
+
+    stage ('CloudFront Invalidation') {
+      steps {
+        withAWS(credentials:'aws-hvacanswers-creds') {
+	   cfInvalidate(distribution: "${CF_DISTRO}", paths:['/*'])
+        }      
+      }
+    }
+  }
+}
